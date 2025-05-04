@@ -4,60 +4,101 @@ import {
   UploadedFile,
   UseInterceptors,
   BadRequestException,
+  Get,
+  Body,
+  NotFoundException,
+  InternalServerErrorException,
+  Logger,
+  ValidationPipe,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
 import { OcrService } from './ocr.service';
+import { LlmService } from '../llm/llm.service';
+import { ExplainDto } from './dto/explain.dto';
+
 import { Express } from 'express';
 
 @Controller('ocr')
 export class OcrController {
-  constructor(private readonly ocrService: OcrService) {}
+  private readonly logger = new Logger(OcrController.name);
+  constructor(
+    private ocrService: OcrService,
+    private llm: LlmService,
+  ) {}
 
   @Post('upload')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({
         destination: './uploads',
-        filename: (req, file, cb) => {
-          const uniqueSuffix =
-            Date.now() + '-' + Math.round(Math.random() * 1e9);
-          const fileExt = file.originalname.split('.').pop();
-          cb(null, `ocr-${uniqueSuffix}.${fileExt}`);
+        filename: (_req, file, cb) => {
+          const name = `ocr-${Date.now()}-${Math.round(Math.random() * 1e9)}.${file.originalname.split('.').pop()}`;
+          cb(null, name);
         },
       }),
-      fileFilter: (req, file, cb) => {
-        // Permite apenas imagens JPEG/PNG
+      fileFilter: (_req, file, cb) => {
         if (!file.mimetype.match(/\/(jpg|jpeg|png)$/)) {
+          console.warn(`Rejected file type: ${file?.mimetype || 'unknown'}`);
           return cb(
-            new BadRequestException('Tipo de arquivo não suportado'),
+            new BadRequestException('Apenas JPG, JPEG ou PNG são permitidos'),
             false,
           );
         }
         cb(null, true);
       },
-      limits: { fileSize: 5 * 1024 * 1024 }, // limite 5MB
+      limits: { fileSize: 5 * 1024 * 1024 },
     }),
   )
   async uploadFile(@UploadedFile() file: Express.Multer.File) {
     if (!file) {
-      throw new BadRequestException('Arquivo não foi enviado');
+      this.logger.error('Nenhum arquivo enviado');
+      throw new BadRequestException('Envie um arquivo para processamento');
     }
     try {
-      const filePath = file.path; // caminho real do arquivo salvo
-      const text = await this.ocrService.extractText(filePath);
-      const record = await this.ocrService.saveResult(filePath, text);
-      return {
-        id: record.id,
-        fileUrl: record.fileUrl,
-        text: record.text,
-        createdAt: record.createdAt,
-      };
+      const text = await this.ocrService.extractText(file.path);
+      const record = await this.ocrService.saveResult(file.path, text);
+      return record;
     } catch (error) {
-      if (error instanceof Error) {
-        throw new BadRequestException(`Erro interno: ${error.message}`);
+      this.logger.error('Erro ao processar upload', error);
+      throw new InternalServerErrorException(
+        'Falha ao processar o arquivo. Tente novamente.',
+      );
+    }
+  }
+
+  @Get('list')
+  async listAll() {
+    try {
+      return await this.ocrService.listAll();
+    } catch (error) {
+      this.logger.error('Erro ao listar documentos', error);
+      throw new InternalServerErrorException(
+        'Não foi possível listar documentos',
+      );
+    }
+  }
+
+  @Post('explain')
+  async explain(@Body(new ValidationPipe()) explainDto: ExplainDto) {
+    this.logger.log(
+      `Dados recebidos após validação: ${JSON.stringify(explainDto)}`,
+    );
+    const { id, query } = explainDto;
+
+    try {
+      const record = await this.ocrService.findById(id);
+      if (!record) {
+        this.logger.warn(`Documento não encontrado: ID ${id}`);
+        throw new NotFoundException('Documento não encontrado');
       }
-      throw new BadRequestException('Erro interno desconhecido');
+      const explanation = await this.llm.explain(record.text, query);
+      return { explanation };
+    } catch (error) {
+      this.logger.error('Erro ao gerar explicação', error);
+      throw error instanceof NotFoundException
+        ? error
+        : new InternalServerErrorException('Erro ao gerar explicação');
     }
   }
 }

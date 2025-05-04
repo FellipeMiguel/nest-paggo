@@ -1,39 +1,60 @@
-import { Injectable } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
+import { createWorker } from 'tesseract.js';
 import { PrismaService } from '../prisma.service';
-import * as Tesseract from 'tesseract.js';
+
 @Injectable()
 export class OcrService {
+  private readonly logger = new Logger(OcrService.name);
+  private workerPromise = createWorker();
+
   constructor(private prisma: PrismaService) {}
 
-  async extractText(filePath: string): Promise<string> {
-    // Extrai texto da imagem usando Tesseract.js
+  private async initWorker() {
     try {
-      const {
-        data: { text },
-      } = await Tesseract.recognize(filePath, 'por');
+      const worker = await this.workerPromise;
+      await worker.load();
+      await worker.load('por');
+      await worker.reinitialize('por');
+    } catch (err) {
+      this.logger.error('Falha ao inicializar worker Tesseract', err);
+      throw new InternalServerErrorException('Erro interno de OCR');
+    }
+  }
+
+  async extractText(path: string): Promise<string> {
+    try {
+      await this.initWorker();
+      const worker = await this.workerPromise;
+      const result = await worker.recognize(path);
+      const { text } = result.data;
+      await worker.terminate();
       return text;
-    } catch (error: unknown) {
-      console.error('Erro ao usar Tesseract:', error);
-      if (error instanceof Error) {
-        throw new Error(`Erro ao processar OCR: ${error.message}`);
-      }
-      throw new Error('Erro ao processar OCR: Erro desconhecido');
+    } catch (err) {
+      this.logger.error(`Falha ao extrair texto de ${path}`, err);
+      throw new InternalServerErrorException(
+        'Erro ao extrair texto do documento',
+      );
     }
   }
 
   async saveResult(fileUrl: string, text: string) {
     try {
-      return await this.prisma.oCR.create({
-        data: {
-          fileUrl,
-          text,
-        },
-      });
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        throw new Error(`Erro ao salvar no banco de dados: ${error.message}`);
-      }
-      throw new Error('Erro ao salvar no banco de dados: Erro desconhecido');
+      return await this.prisma.oCR.create({ data: { fileUrl, text } });
+    } catch (err) {
+      this.logger.error('Erro ao salvar resultado no DB', err);
+      throw new InternalServerErrorException('Erro ao salvar resultado');
     }
+  }
+
+  listAll() {
+    return this.prisma.oCR.findMany();
+  }
+
+  findById(id: number) {
+    return this.prisma.oCR.findUnique({ where: { id } });
   }
 }
