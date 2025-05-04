@@ -11,8 +11,6 @@ export class OcrService {
       const {
         data: { text },
       } = await Tesseract.recognize(filePath, 'por');
-      console.log('Tesseract:', Tesseract);
-      console.log('Caminho do arquivo:', filePath);
       return text;
     } catch (error: unknown) {
       console.error('Erro ao usar Tesseract:', error);
