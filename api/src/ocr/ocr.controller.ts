@@ -43,14 +43,21 @@ export class OcrController {
     if (!file) {
       throw new BadRequestException('Arquivo não foi enviado');
     }
-    const filePath = file.path; // caminho real do arquivo salvo
-    const text = await this.ocrService.extractText(filePath);
-    const record = await this.ocrService.saveResult(filePath, text);
-    return {
-      id: record.id,
-      fileUrl: record.fileUrl,
-      text: record.text,
-      createdAt: record.createdAt,
-    };
+    try {
+      const filePath = file.path; // caminho real do arquivo salvo
+      const text = await this.ocrService.extractText(filePath);
+      const record = await this.ocrService.saveResult(filePath, text);
+      return {
+        id: record.id,
+        fileUrl: record.fileUrl,
+        text: record.text,
+        createdAt: record.createdAt,
+      };
+    } catch (error) {
+      if (error instanceof Error) {
+        throw new BadRequestException(`Erro interno: ${error.message}`);
+      }
+      throw new BadRequestException('Erro interno desconhecido');
+    }
   }
 }
