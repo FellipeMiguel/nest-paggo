@@ -4,19 +4,18 @@
 // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
-generator client {
-  provider = "prisma-client-js"
-  output   = "../generated/prisma"
-}
-
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-model Document {
-  id        String   @id @default(uuid())
+generator client {
+  provider = "prisma-client-js"
+}
+
+model OCR {
+  id        Int      @id @default(autoincrement())
   fileUrl   String
-  ocrText   String?
+  text      String
   createdAt DateTime @default(now())
 }

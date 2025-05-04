@@ -1,0 +1,9 @@
+-- CreateTable
+CREATE TABLE "OCR" (
+    "id" SERIAL NOT NULL,
+    "fileUrl" TEXT NOT NULL,
+    "text" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "OCR_pkey" PRIMARY KEY ("id")
+);
