@@ -1,27 +1,38 @@
 import {
   Controller,
   Post,
+  Get,
   UploadedFile,
   UseInterceptors,
-  BadRequestException,
-  Get,
+  Req,
   Body,
+  BadRequestException,
   NotFoundException,
   InternalServerErrorException,
-  Logger,
   ValidationPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
+import { Express } from 'express';
+
 import { OcrService } from './ocr.service';
 import { LlmService } from '../llm/llm.service';
 import { ExplainDto } from './dto/explain.dto';
+import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 
-import { Express } from 'express';
+interface AuthenticatedRequest extends Express.Request {
+  user: {
+    userId: string;
+    email: string;
+    name?: string;
+    image?: string;
+  };
+}
 
 @Controller('ocr')
+@UseGuards(JwtAuthGuard)
 export class OcrController {
-  private readonly logger = new Logger(OcrController.name);
   constructor(
     private ocrService: OcrService,
     private llm: LlmService,
@@ -33,72 +44,56 @@ export class OcrController {
       storage: diskStorage({
         destination: './uploads',
         filename: (_req, file, cb) => {
-          const name = `ocr-${Date.now()}-${Math.round(Math.random() * 1e9)}.${file.originalname.split('.').pop()}`;
-          cb(null, name);
+          const ext = file.originalname.split('.').pop();
+          cb(null, `ocr-${Date.now()}-${Math.round(Math.random() * 1e9)}.${ext}`);
         },
       }),
       fileFilter: (_req, file, cb) => {
         if (!file.mimetype.match(/\/(jpg|jpeg|png)$/)) {
-          console.warn(`Rejected file type: ${file?.mimetype || 'unknown'}`);
-          return cb(
-            new BadRequestException('Apenas JPG, JPEG ou PNG são permitidos'),
-            false,
-          );
+          return cb(new BadRequestException('Apenas JPG, JPEG ou PNG são permitidos'), false);
         }
         cb(null, true);
       },
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
   )
-  async uploadFile(@UploadedFile() file: Express.Multer.File) {
+  async uploadFile(
+    @UploadedFile() file: Express.Multer.File,
+    @Req() req: AuthenticatedRequest,
+  ) {
     if (!file) {
-      this.logger.error('Nenhum arquivo enviado');
       throw new BadRequestException('Envie um arquivo para processamento');
     }
-    try {
-      const text = await this.ocrService.extractText(file.path);
-      const record = await this.ocrService.saveResult(file.path, text);
-      return record;
-    } catch (error) {
-      this.logger.error('Erro ao processar upload', error);
-      throw new InternalServerErrorException(
-        'Falha ao processar o arquivo. Tente novamente.',
-      );
-    }
+    // extrai user completo
+    const { userId, email, name, image } = req.user;
+  
+    const text = await this.ocrService.extractText(file.path);
+    const record = await this.ocrService.saveResult(
+      file.path,
+      text,
+      { userId, email, name, image },
+    );
+    return record;
   }
+  
 
   @Get('list')
-  async listAll() {
-    try {
-      return await this.ocrService.listAll();
-    } catch (error) {
-      this.logger.error('Erro ao listar documentos', error);
-      throw new InternalServerErrorException(
-        'Não foi possível listar documentos',
-      );
-    }
+  async listAll(@Req() req: AuthenticatedRequest) {
+    const userId = req.user.userId;
+    return this.ocrService.listAll(userId);
   }
 
   @Post('explain')
-  async explain(@Body(new ValidationPipe()) explainDto: ExplainDto) {
-    this.logger.log(
-      `Dados recebidos após validação: ${JSON.stringify(explainDto)}`,
-    );
-    const { id, query } = explainDto;
-
-    try {
-      const record = await this.ocrService.findById(id);
-      if (!record) {
-        this.logger.warn(`Documento não encontrado: ID ${id}`);
-        throw new NotFoundException('Documento não encontrado');
-      }
-      const explanation = await this.llm.explain(record.text, query);
-      return { explanation };
-    } catch (error) {
-      this.logger.error('Erro ao gerar explicação', error);
-      throw error instanceof NotFoundException
-        ? error
-        : new InternalServerErrorException('Erro ao gerar explicação');
+  async explain(
+    @Body(new ValidationPipe()) explainDto: ExplainDto,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    const userId = req.user.userId;
+    const record = await this.ocrService.findById(explainDto.id, userId);
+    if (!record) {
+      throw new NotFoundException('Documento não encontrado');
     }
+    const explanation = await this.llm.explain(record.text, explainDto.query);
+    return { explanation };
   }
 }

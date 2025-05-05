@@ -1,8 +1,5 @@
-import {
-  Injectable,
-  InternalServerErrorException,
-  Logger,
-} from '@nestjs/common';
+// src/ocr/ocr.service.ts
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import { createWorker } from 'tesseract.js';
 import { PrismaService } from '../prisma.service';
 
@@ -35,26 +32,50 @@ export class OcrService {
       return text;
     } catch (err) {
       this.logger.error(`Falha ao extrair texto de ${path}`, err);
-      throw new InternalServerErrorException(
-        'Erro ao extrair texto do documento',
-      );
+      throw new InternalServerErrorException('Erro ao extrair texto do documento');
     }
   }
 
-  async saveResult(fileUrl: string, text: string) {
+  async saveResult(
+    fileUrl: string,
+    text: string,
+    user: { userId: string; email: string; name?: string; image?: string }
+  ) {
+    const { userId, email, name, image } = user;
+    // 1) Garantir que o usuário exista
+    await this.prisma.user.upsert({
+      where: { id: userId },
+      update: {},
+      create: {
+        id: userId,
+        email,
+        name: name ?? null,
+        image: image ?? null,
+      },
+    });
+  
+    // 2) Criar o OCR
     try {
-      return await this.prisma.oCR.create({ data: { fileUrl, text } });
+      return await this.prisma.oCR.create({
+        data: { fileUrl, text, userId },
+      });
     } catch (err) {
       this.logger.error('Erro ao salvar resultado no DB', err);
       throw new InternalServerErrorException('Erro ao salvar resultado');
     }
   }
+  
 
-  listAll() {
-    return this.prisma.oCR.findMany();
+  listAll(userId: string) {
+    return this.prisma.oCR.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
-  findById(id: number) {
-    return this.prisma.oCR.findUnique({ where: { id } });
+  findById(id: number, userId: string) {
+    return this.prisma.oCR.findFirst({
+      where: { id, userId },
+    });
   }
 }
