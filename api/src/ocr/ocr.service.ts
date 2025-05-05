@@ -42,7 +42,7 @@ export class OcrService {
     user: { userId: string; email: string; name?: string; image?: string }
   ) {
     const { userId, email, name, image } = user;
-    // 1) Garantir que o usuário exista
+
     await this.prisma.user.upsert({
       where: { id: userId },
       update: {},
@@ -53,8 +53,7 @@ export class OcrService {
         image: image ?? null,
       },
     });
-  
-    // 2) Criar o OCR
+
     try {
       return await this.prisma.oCR.create({
         data: { fileUrl, text, userId },
@@ -64,7 +63,6 @@ export class OcrService {
       throw new InternalServerErrorException('Erro ao salvar resultado');
     }
   }
-  
 
   listAll(userId: string) {
     return this.prisma.oCR.findMany({
