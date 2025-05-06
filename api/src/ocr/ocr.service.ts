@@ -1,4 +1,3 @@
-// src/ocr/ocr.service.ts
 import {
   Injectable,
   InternalServerErrorException,
@@ -75,11 +74,43 @@ export class OcrService {
     }
   }
 
-  listAll(userId: string) {
-    return this.prisma.oCR.findMany({
-      where: { userId },
-      orderBy: { createdAt: 'desc' },
-    });
+  async listAll(
+    userId: string,
+    pageNumber: number = 1,
+    itemsPerPage: number = 6,
+    search?: string,
+  ) {
+    try {
+      const whereClause: any = { userId };
+      if (search) {
+        whereClause.name = {
+          contains: search,
+          mode: 'insensitive',
+        };
+      }
+
+      const totalCount = await this.prisma.oCR.count({
+        where: whereClause,
+      });
+
+      const documents = await this.prisma.oCR.findMany({
+        where: whereClause,
+        orderBy: { createdAt: 'desc' },
+        skip: (pageNumber - 1) * itemsPerPage,
+        take: itemsPerPage,
+      });
+
+      return {
+        documents,
+        totalPages: Math.ceil(totalCount / itemsPerPage),
+        currentPage: pageNumber,
+      };
+    } catch (err) {
+      this.logger.error('Falha na listagem paginada de documentos', err);
+      throw new InternalServerErrorException(
+        'Erro ao carregar documentos paginados.',
+      );
+    }
   }
 
   findById(id: number, userId: string) {

@@ -11,6 +11,7 @@ import {
   UseGuards,
   NotFoundException,
   ValidationPipe,
+  Query,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { diskStorage } from 'multer';
@@ -29,7 +30,7 @@ interface AuthenticatedRequest extends Request {
   };
 }
 
-@UseGuards(JwtAuthGuard) // Aplica o guard a todos os endpoints deste controller
+@UseGuards(JwtAuthGuard)
 @Controller('ocr')
 export class OcrController {
   constructor(
@@ -44,18 +45,12 @@ export class OcrController {
         destination: './uploads',
         filename: (_req, file, cb) => {
           const ext = file.originalname.split('.').pop();
-          cb(
-            null,
-            `ocr-${Date.now()}-${Math.round(Math.random() * 1e9)}.${ext}`,
-          );
+          cb(null, `ocr-${Date.now()}-${Math.round(Math.random() * 1e9)}.${ext}`);
         },
       }),
       fileFilter: (_req, file, cb) => {
         if (!file.mimetype.match(/\/(jpg|jpeg|png)$/)) {
-          return cb(
-            new BadRequestException('Apenas JPG, JPEG ou PNG são permitidos'),
-            false,
-          );
+          return cb(new BadRequestException('Apenas JPG, JPEG ou PNG são permitidos'), false);
         }
         cb(null, true);
       },
@@ -78,7 +73,7 @@ export class OcrController {
     const result = await this.ocrService.saveResult(fileUrl, text, {
       userId: user.userId,
       email: user.email,
-      name: documentName, // Usa o nome enviado pelo usuário
+      name: documentName,
       image: user.image,
     });
 
@@ -86,9 +81,16 @@ export class OcrController {
   }
 
   @Get('list')
-  async listAll(@Req() req: AuthenticatedRequest) {
+  async listAll(
+    @Req() req: AuthenticatedRequest,
+    @Query('page') page?: string,
+    @Query('search') search?: string,
+  ) {
     const userId = req.user.userId;
-    return this.ocrService.listAll(userId);
+    const itemsPerPage = 6;
+    const pageNumber = page ? parseInt(page, 10) : 1;
+
+    return this.ocrService.listAll(userId, pageNumber, itemsPerPage, search);
   }
 
   @Post('explain')
