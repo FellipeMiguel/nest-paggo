@@ -7,20 +7,27 @@ export class LlmService {
     apiKey: process.env.OPENAI_API_KEY,
   });
 
+  /**
+   * Explica o texto extraído utilizando uma consulta específica.
+   *
+   * @param text - O texto extraído do documento que precisa ser explicado.
+   * @param query - A consulta ou pergunta relacionada ao texto para gerar uma explicação.
+   * @returns Uma Promise que resolve para a explicação gerada pelo modelo LLM.
+   *
+   * @throws {HttpException} Quando a resposta da OpenAI não possui o formato esperado ou em caso de 
+   * erro na chamada da API, como cota excedida.
+   */
   async explain(text: string, query: string): Promise<string> {
     const prompt = `Texto extraído:\n"""${text}"""\n\nExplique o seguinte: ${query}`;
 
-    // Cast para satisfazer o tipo esperado sem precisar do 'name' das function messages
+    // Define as mensagens a serem enviadas para a OpenAI.
     const messages = [
       {
         role: 'system',
-        content:
-          'Você é um assistente experiente em explicar textos extraídos por OCR.',
+        content: 'Você é um assistente experiente em explicar textos extraídos por OCR.',
       },
       { role: 'user', content: prompt },
-    ] as unknown as Parameters<
-      OpenAI['chat']['completions']['create']
-    >[0]['messages'];
+    ] as unknown as Parameters<OpenAI['chat']['completions']['create']>[0]['messages'];
 
     try {
       const resp = await this.openai.chat.completions.create({
@@ -40,7 +47,7 @@ export class LlmService {
       }
       return answer.trim();
     } catch (err: any) {
-      // Trate cota excedida
+      // Tratamento para cota excedida
       if (err.code === 'insufficient_quota' || err.status === 429) {
         throw new HttpException(
           {

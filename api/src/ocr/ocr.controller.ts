@@ -20,6 +20,15 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ExplainDto } from './dto/explain.dto';
 import { LlmService } from '../llm/llm.service';
 import { Request } from 'express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+  ApiQuery,
+} from '@nestjs/swagger';
 
 interface AuthenticatedRequest extends Request {
   user: {
@@ -30,6 +39,8 @@ interface AuthenticatedRequest extends Request {
   };
 }
 
+@ApiTags('OCR')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @Controller('ocr')
 export class OcrController {
@@ -50,13 +61,44 @@ export class OcrController {
       }),
       fileFilter: (_req, file, cb) => {
         if (!file.mimetype.match(/\/(jpg|jpeg|png)$/)) {
-          return cb(new BadRequestException('Apenas JPG, JPEG ou PNG são permitidos'), false);
+          return cb(
+            new BadRequestException('Apenas JPG, JPEG ou PNG são permitidos'),
+            false,
+          );
         }
         cb(null, true);
       },
       limits: { fileSize: 5 * 1024 * 1024 },
     }),
   )
+  @ApiOperation({ summary: 'Fazer upload de um documento para processamento OCR.' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    description: 'Dados para o upload do documento',
+    schema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Nome do Documento',
+        },
+        file: {
+          type: 'string',
+          format: 'binary',
+          description: 'Arquivo da imagem (JPG, JPEG ou PNG)',
+        },
+      },
+      required: ['name', 'file'],
+    },
+  })
+  @ApiResponse({
+    status: 201,
+    description: 'Documento processado com sucesso.',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Dados inválidos ou arquivo não permitido.',
+  })
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
     @Body('name') documentName: string,
@@ -81,6 +123,23 @@ export class OcrController {
   }
 
   @Get('list')
+  @ApiOperation({ summary: 'Listar documentos processados com paginação e pesquisa.' })
+  @ApiQuery({
+    name: 'page',
+    required: false,
+    type: Number,
+    description: 'Número da página (padrão: 1)',
+  })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    type: String,
+    description: 'Termo para busca no nome ou conteúdo do documento',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Retorna a lista de documentos.',
+  })
   async listAll(
     @Req() req: AuthenticatedRequest,
     @Query('page') page?: string,
@@ -94,6 +153,19 @@ export class OcrController {
   }
 
   @Post('explain')
+  @ApiOperation({ summary: 'Obter explicação interativa sobre o conteúdo de um documento usando LLM.' })
+  @ApiBody({
+    type: ExplainDto,
+    description: 'Objeto contendo o id do documento e a query para explicação.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Retorna a explicação gerada pelo LLM.',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Documento não encontrado.',
+  })
   async explain(
     @Body(new ValidationPipe({ transform: true })) explainDto: ExplainDto,
     @Req() req: AuthenticatedRequest,

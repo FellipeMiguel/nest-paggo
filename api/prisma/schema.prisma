@@ -1,26 +1,31 @@
+// Define o gerador do cliente Prisma, que é responsável por gerar a interface de acesso ao banco de dados.
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client-js" // Utiliza o Prisma Client para JavaScript/TypeScript.
 }
 
+// Configura a fonte de dados, neste caso um banco de dados PostgreSQL.
+// A URL de conexão é lida da variável de ambiente DATABASE_URL.
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+// Modelo que representa o usuário no sistema.
 model User {
-  id    String  @id @default(cuid())
-  email String  @unique
-  name  String?
-  image String?
-  ocrs  OCR[]
+  id    String  @id @default(cuid()) // Identificador único do usuário usando o método cuid().
+  email String  @unique            // O e-mail deve ser único.
+  name  String?                     // Nome do usuário (opcional).
+  image String?                     // URL ou caminho da imagem do usuário (opcional).
+  ocrs  OCR[]                     // Relação 1:N com o modelo OCR. Cada usuário pode ter vários registros OCR.
 }
 
+// Modelo que representa um registro de OCR.
 model OCR {
-  id        Int      @id @default(autoincrement())
-  name      String?
-  fileUrl   String
-  text      String
-  createdAt DateTime @default(now())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  id        Int      @id @default(autoincrement()) // Identificador único do registro, autoincrementado.
+  name      String?                                // Nome ou descrição opcional do documento.
+  fileUrl   String                                 // URL ou caminho do arquivo que foi processado.
+  text      String                                 // Texto extraído do documento.
+  createdAt DateTime @default(now())               // Data de criação do registro, definida como o horário atual por padrão.
+  userId    String                                 // Chave estrangeira que referencia o usuário dono deste registro.
+  user      User     @relation(fields: [userId], references: [id]) // Relação N:1 definindo a associação com o modelo User.
 }
