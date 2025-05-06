@@ -1,5 +1,9 @@
 // src/ocr/ocr.service.ts
-import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  InternalServerErrorException,
+  Logger,
+} from '@nestjs/common';
 import { createWorker } from 'tesseract.js';
 import { PrismaService } from '../prisma.service';
 
@@ -32,14 +36,16 @@ export class OcrService {
       return text;
     } catch (err) {
       this.logger.error(`Falha ao extrair texto de ${path}`, err);
-      throw new InternalServerErrorException('Erro ao extrair texto do documento');
+      throw new InternalServerErrorException(
+        'Erro ao extrair texto do documento',
+      );
     }
   }
 
   async saveResult(
     fileUrl: string,
     text: string,
-    user: { userId: string; email: string; name?: string; image?: string }
+    user: { userId: string; email: string; name?: string; image?: string },
   ) {
     const { userId, email, name, image } = user;
 
@@ -56,7 +62,12 @@ export class OcrService {
 
     try {
       return await this.prisma.oCR.create({
-        data: { fileUrl, text, userId },
+        data: {
+          name,
+          fileUrl,
+          text,
+          userId,
+        },
       });
     } catch (err) {
       this.logger.error('Erro ao salvar resultado no DB', err);

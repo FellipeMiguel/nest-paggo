@@ -64,6 +64,7 @@ export class OcrController {
   )
   async uploadFile(
     @UploadedFile() file: Express.Multer.File,
+    @Body('name') documentName: string,
     @Req() req: AuthenticatedRequest,
   ) {
     const user = req.user;
@@ -77,7 +78,7 @@ export class OcrController {
     const result = await this.ocrService.saveResult(fileUrl, text, {
       userId: user.userId,
       email: user.email,
-      name: user.name,
+      name: documentName, // Usa o nome enviado pelo usuário
       image: user.image,
     });
 
